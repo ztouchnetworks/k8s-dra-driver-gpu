@@ -15,7 +15,7 @@
 DRIVER_NAME := k8s-dra-driver
 MODULE := github.com/NVIDIA/$(DRIVER_NAME)
 
-REGISTRY ?= nvcr.io/nvidia/cloud-native
+REGISTRY ?= docker.io/thommichel
 
 VERSION  ?= v0.1.0
 

@@ -38,7 +38,7 @@ TARGETS := $(MAKE_TARGETS) $(CMD_TARGETS)
 DOCKER_TARGETS := $(patsubst %,docker-%, $(TARGETS))
 .PHONY: $(TARGETS) $(DOCKER_TARGETS)
 DOCKERFILE_DEVEL ?= "images/devel/Dockerfile"
-DOCKERFILE_CONTEXT ?= "https://github.com/NVIDIA/k8s-test-infra.git"
+DOCKERFILE_CONTEXT ?= "https://github.com/thommichel/k8s-test-infra.git"
 
 GOOS ?= linux
 GOARCH ?= $(shell uname -m | sed -e 's,aarch64,arm64,' -e 's,x86_64,amd64,')

@@ -18,6 +18,7 @@ spec:
     spec:
       nodeName: {{ .NodeName }}
       hostPID: true
+      serviceAccountName: nvidia-dra-driver-k8s-dra-driver-service-account
       containers:
       - name: mps-control-daemon
         image: ubuntu:22.04

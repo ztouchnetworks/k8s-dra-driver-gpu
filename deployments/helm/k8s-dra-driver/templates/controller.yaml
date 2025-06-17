@@ -58,6 +58,9 @@ spec:
         env:
         - name: DEVICE_CLASSES
           value: {{ .Values.deviceClasses | join "," }}
+        # Use runc: explicit "void"; otherwise we inherit "all".
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: void
         - name: POD_NAME
           valueFrom:
             fieldRef:
