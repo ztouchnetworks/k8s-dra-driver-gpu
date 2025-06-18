@@ -1,97 +1,188 @@
-# Dynamic Resource Allocation (DRA) for NVIDIA GPUs in Kubernetes
+# Running the NVIDIA DRA Driver on Red Hat OpenShift
 
-This DRA resource driver is currently under active development and not yet
-designed for production use.
-We may (at times) decide to push commits over `main` until we have something more stable.
-Use at your own risk.
+This document details how to install and run the NVIDIA DRA driver on Openshift 4.18
 
-A document and demo of the DRA support for GPUs provided by this repo can be found below:
-|                                                                                                                          Document                                                                                                                          |                                                                                                                                                                   Demo                                                                                                                                                                   |
-|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| [<img width="300" alt="Dynamic Resource Allocation (DRA) for GPUs in Kubernetes" src="https://drive.google.com/uc?export=download&id=12EwdvHHI92FucRO2tuIqLR33OC8MwCQK">](https://docs.google.com/document/d/1BNWqgx_SmZDi-va_V31v3DnuVwYnF2EmN7D-O_fB6Oo) | [<img width="300" alt="Demo of Dynamic Resource Allocation (DRA) for GPUs in Kubernetes" src="https://drive.google.com/uc?export=download&id=1UzB-EBEVwUTRF7R0YXbGe9hvTjuKaBlm">](https://drive.google.com/file/d/1iLg2FEAEilb1dcI27TnB19VYtbcvgKhS/view?usp=sharing "Demo of Dynamic Resource Allocation (DRA) for GPUs in Kubernetes") |
+## Prerequisites
+
+1. OpenShift 4.18
+2. OpenShift CLI `oc`
+3. NVIDIA GPU Operator
+4. OpenShift DRA
+
+## Installation Walkthrough
+
+### Install OpenShift
+
+Install OpenShift 4.18. You can use the Assisted Installer to install on bare metal, or obtain an IPI installer binary (`openshift-install`) from the [OpenShift clients page](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/) page. Refer to the [OpenShift documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/installation_overview/ocp-installation-overview) for different installation methods.
+
+### Install OpenShift CLI
+
+Install the OpenShift CLI `oc`. See the official documentation [here](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/cli_tools/openshift-cli-oc#cli-about-cli_cli-developer-commands) and the official downloads [here](https://console.redhat.com/openshift/downloads)
+
+
+### Install the NVIDIA GPU Operator
+
+Install NVIDIA GPU Operator **_v25.3.1_** by following the official documentation [here](https://docs.nvidia.com/datacenter/cloud-native/openshift/24.9.2/steps-overview.html). **Make sure** to also install the Node Feature Discovery Operator as it is a required dependency of the GPU Operator.
+
+Once installed, begin creating the default cluster policy as described [here](https://docs.nvidia.com/datacenter/cloud-native/openshift/latest/install-gpu-ocp.html#create-the-clusterpolicy-instance). The only change that needs to be done to the default policy is to disable the devicePlugin
+
+```
+  devicePlugin:
+    config:
+      ...
+    enabled: false
+    mps:
+      ...
+```
+
+Create the policy with that one change and wait for the state to be `ready` (this can take from 15-30 minutes)
+
+![cluster policy ready example](./docs/cluster-policy-ready.png)
+
+### MIG
+
+If MIG is going to be used on the node, enable it with the following commands
+
+Set the strategy to mixed
+
+```
+STRATEGY=mixed && \
+  oc patch clusterpolicy/gpu-cluster-policy --type='json' -p='[{"op": "replace", "path": "/spec/mig/strategy", "value": '$STRATEGY'}]'
+```
+
+Set the desired MIG profiles. The available default MIG profiles can be seen [here](https://gitlab.com/nvidia/kubernetes/gpu-operator/-/blob/v1.8.0/assets/state-mig-manager/0400_configmap.yaml). To create custom profiles, follow these [instructions](https://docs.nvidia.com/datacenter/cloud-native/openshift/latest/mig-ocp.html#creating-and-applying-a-custom-mig-configuration). This example will use the `all-balanced` MIG setup.
+
+```
+NODE_NAME=<node name> && MIG_CONFIGURATION=all-balanced && oc label node/$NODE_NAME nvidia.com/mig.config=$MIG_CONFIGURATION --overwrite
+```
+
+Check the status of the profile change by running
+
+```
+oc -n nvidia-gpu-operator logs ds/nvidia-mig-manager --all-containers -f --prefix
+```
+
+If successful, the logs will look something like this
+
+```
+[pod/nvidia-mig-manager-nq2fs/nvidia-mig-manager] node/<node name> labeled
+[pod/nvidia-mig-manager-nq2fs/nvidia-mig-manager] Changing the 'nvidia.com/mig.config.state' node label to 'success'
+[pod/nvidia-mig-manager-nq2fs/nvidia-mig-manager] node/<node name> labeled
+[pod/nvidia-mig-manager-nq2fs/nvidia-mig-manager] time="2025-06-18T18:38:35Z" level=info msg="Successfully updated to MIG config: all-balanced"
+[pod/nvidia-mig-manager-nq2fs/nvidia-mig-manager] time="2025-06-18T18:38:35Z" level=info msg="Waiting for change to 'nvidia.com/mig.config' label"
+```
+
+Finally, use the NVIDIA GPU Operator to confirm the creation of the profiles. First, identify the driver daemonset by running
+
+```
+oc get pods -n nvidia-gpu-operator
+```
+
+Then run `nvidia-smi` through the daemonset with
+
+```
+oc exec -ti <nvidia-driver-daemonset-xxxxx...> -n nvidia-gpu-operator -- nvidia-smi
+```
+
+If successful, you should see something like this
+```
+Wed Jun 18 19:22:47 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.148.08             Driver Version: 570.148.08     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100 80GB PCIe          On  |   00000000:B6:00.0 Off |                   On |
+| N/A   54C    P0             90W /  300W |     249MiB /  81920MiB |     N/A      Default |
+|                                         |                        |              Enabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| MIG devices:                                                                            |
++------------------+----------------------------------+-----------+-----------------------+
+| GPU  GI  CI  MIG |                     Memory-Usage |        Vol|        Shared         |
+|      ID  ID  Dev |                       BAR1-Usage | SM     Unc| CE ENC  DEC  OFA  JPG |
+|                  |                                  |        ECC|                       |
+|==================+==================================+===========+=======================|
+|  0    1   0   0  |             107MiB / 40192MiB    | 42      0 |  3   0    2    0    0 |
+|                  |                 0MiB / 65535MiB  |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0    5   0   1  |              71MiB / 19968MiB    | 28      0 |  2   0    1    0    0 |
+|                  |                 0MiB / 32767MiB  |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0   13   0   2  |              36MiB /  9728MiB    | 14      0 |  1   0    0    0    0 |
+|                  |                 0MiB / 16383MiB  |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0   14   0   3  |              36MiB /  9728MiB    | 14      0 |  1   0    0    0    0 |
+|                  |                 0MiB / 16383MiB  |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+```
+
+### Enabling DRA on OpenShift
+
+**NOTE** enabling DRA in OpenShift permanently prevents the cluster from being upgraded with minor updates and cannot be undone. Only proceed if this does not matter for your cluster.
+
+DRA is an experimental feature and is not available by default in OpenShift. To use it, enable the `TechPreviewNoUpgrade` feature set as explained in [Enabling features using FeatureGates](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/nodes/working-with-clusters#nodes-cluster-enabling), either with the CLI or Web Console. The feature set includes the `DynamicResourceAllocation` feature gate.
+
+Additionally, set the scheduler to have `HighNodeUtilization` in the CLI
+
+```console
+$ oc patch --type merge -p '{"spec":{"profile": "HighNodeUtilization"}}' scheduler cluster
+```
+
+
+### Install the DRA Driver
+
+This DRA Driver is built off of NVIDIA's DRA Driver for Kubernetes 1.31 and uses the the v1alpha3 DRA API
+
+
+ADD LINKS
+
+
+
+Clone the repo and cd into it
+
+```
+GIT GLONE
+```
+
+Install the DRA driver
+
+```
+./demo/clusters/openshift/install-dra-driver.sh
+```
+
+And make sure the pods startup correctly
+
+```
+$ oc get pods -n nvidia
+NAME                                                          READY   STATUS    RESTARTS   AGE
+nvidia-dra-driver-k8s-dra-driver-controller-6c8958947-ls6px   1/1     Running   0          10s
+nvidia-dra-driver-k8s-dra-driver-kubelet-plugin-pskgj         1/1     Running   0          10s
+```
+
+#### Building a Custom Image
+
+If any custom changes need to be made to DRA Driver image, modify the necessary files and rebuild the image
+```
+./demo/clusters/openshift/build-dra-driver.sh
+```
+
+This image will then need to be added to some sort of registry so it can be referenced by `./versions.mk`, `./deployments/helm/k8s-dra-driver/Chart.yaml`, and `./deployments/helm/k8s-dra-driver/values.yaml`
 
 ## Demo
 
-This section describes using `kind` to demo the functionality of the NVIDIA GPU DRA Driver.
-
-First since we'll launch kind with GPU support, ensure that the following prerequisites are met:
-1. `kind` is installed. See the official documentation [here](https://kind.sigs.k8s.io/docs/user/quick-start/#installation).
-1. Ensure that the NVIDIA Container Toolkit is installed on your system. This
-   can be done by following the instructions
-   [here](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
-1. Configure the NVIDIA Container Runtime as the **default** Docker runtime:
-   ```console
-   sudo nvidia-ctk runtime configure --runtime=docker --set-as-default
-   ```
-1. Restart Docker to apply the changes:
-   ```console
-   sudo systemctl restart docker
-   ```
-1. Set the `accept-nvidia-visible-devices-as-volume-mounts` option to `true` in
-   the `/etc/nvidia-container-runtime/config.toml` file to configure the NVIDIA
-   Container Runtime to use volume mounts to select devices to inject into a
-   container.
-   ``` console
-   sudo nvidia-ctk config --in-place --set accept-nvidia-visible-devices-as-volume-mounts=true
-   ```
-
-1. Show the current set of GPUs on the machine:
-   ```console
-   nvidia-smi -L
-   ```
-
-We start by first cloning this repository and `cd`ing into it.
-All of the scripts and example Pod specs used in this demo are in the `demo`
-subdirectory, so take a moment to browse through the various files and see
-what's available:
-
-```console
-git clone https://github.com/NVIDIA/k8s-dra-driver.git
-```
-```console
-cd k8s-dra-driver
-```
-
-### Setting up the infrastructure
-
-Here's a demo showing how to install and configure DRA, and run a pod in a `kind` cluster on a Linux workstation. 
-
-<p align="center">
-<img width="800" src="./demo/specs/quickstart/basic-demo.svg">
-</p>
-
-Below are the detailed, step-by-step instructions.
-
-First, create a `kind` cluster to run the demo:
-```bash
-./demo/clusters/kind/create-cluster.sh
-```
-
-From here we will build the image for the example resource driver:
-```console
-./demo/clusters/kind/build-dra-driver.sh
-```
-
-This also makes the built images available to the `kind` cluster.
-
-We now install the NVIDIA GPU DRA driver:
-```console
-./demo/clusters/kind/install-dra-driver.sh
-```
-
-This should show two pods running in the `nvidia-dra-driver` namespace:
-```console
-kubectl get pods -n nvidia-dra-driver
-```
-```
-NAME                                         READY   STATUS    RESTARTS   AGE
-nvidia-k8s-dra-driver-kubelet-plugin-t5qgz   1/1     Running   0          44s
-```
-
-### Run the examples by following the steps in the demo script
-Finally, you can run the various examples contained in the `demo/specs/quickstart` folder.
-With the most recent updates for Kubernetes v1.31, only the first 3 examples in
-this folder are currently functional.
+<!-- Finally, you can run the various examples contained in the `demo/specs/quickstart` folder
 
 You can run them as follows:
 ```console
@@ -140,45 +231,4 @@ GPU 0: A100-SXM4-40GB (UUID: GPU-4404041a-04cf-1ccf-9e70-f139a9b1e23c)
 Remove the cluster created in the preceding steps:
 ```console
 ./demo/clusters/kind/delete-cluster.sh
-```
-
-<!--
-TODO: This README should be extended with additional content including:
-
-## Information for "real" deployment including prerequesites
-
-This may include the following content from the original scripts:
-```
-set -e
-
-export VERSION=v0.1.0
-
-REGISTRY=nvcr.io/nvidia/cloud-native
-IMAGE=k8s-dra-driver
-PLATFORM=ubi8
-
-sudo true
-make -f deployments/container/Makefile build-${PLATFORM}
-docker tag ${REGISTRY}/${IMAGE}:${VERSION}-${PLATFORM} ${REGISTRY}/${IMAGE}:${VERSION}
-docker save ${REGISTRY}/${IMAGE}:${VERSION} > image.tgz
-sudo ctr -n k8s.io image import image.tgz
-```
-
-## Information on advanced usage such as MIG.
-
-This includes setting configuring MIG on the host using mig-parted. Some of the demo scripts included
-in ./demo/ require this.
-
-```
-cat <<EOF | sudo -E nvidia-mig-parted apply -f -
-version: v1
-mig-configs:
-half-half:
-   - devices: [0,1,2,3]
-      mig-enabled: false
-   - devices: [4,5,6,7]
-      mig-enabled: true
-      mig-devices: {}
-EOF
-```
--->
+``` -->
