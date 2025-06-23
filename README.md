@@ -47,20 +47,20 @@ If MIG is going to be used on the node, enable it with the following commands
 
 Set the strategy to mixed
 
-```
+```bash
 STRATEGY=mixed && \
   oc patch clusterpolicy/gpu-cluster-policy --type='json' -p='[{"op": "replace", "path": "/spec/mig/strategy", "value": '$STRATEGY'}]'
 ```
 
 Set the desired MIG profiles. The available default MIG profiles can be seen [here](https://gitlab.com/nvidia/kubernetes/gpu-operator/-/blob/v1.8.0/assets/state-mig-manager/0400_configmap.yaml). To create custom profiles, follow [these instructions](https://docs.nvidia.com/datacenter/cloud-native/openshift/25.3.1/mig-ocp.html#creating-and-applying-a-custom-mig-configuration). This example will use the `all-balanced` MIG setup.
 
-```
+```bash
 NODE_NAME=<node name> && MIG_CONFIGURATION=all-balanced && oc label node/$NODE_NAME nvidia.com/mig.config=$MIG_CONFIGURATION --overwrite
 ```
 
 Check the status of the profile change by running
 
-```
+```bash
 oc -n nvidia-gpu-operator logs ds/nvidia-mig-manager --all-containers -f --prefix
 ```
 
@@ -77,13 +77,13 @@ If successful, the logs will look something like this
 
 Finally, use the NVIDIA GPU Operator to confirm the MIG profiles were created succesfully. Start by identifying the driver daemonset
 
-```
+```bash
 oc get pods -n nvidia-gpu-operator | grep nvidia-driver-daemonset
 ```
 
 Then run `nvidia-smi` through the daemonset with
 
-```
+```bash
 oc exec -ti <nvidia-driver-daemonset-xxxxx...> -n nvidia-gpu-operator -- nvidia-smi
 ```
 
@@ -139,7 +139,7 @@ DRA is an experimental feature and is not available by default in OpenShift. To 
 
 Next, set the scheduler to have `HighNodeUtilization` in the CLI
 
-```console
+```bash
 $ oc patch --type merge -p '{"spec":{"profile": "HighNodeUtilization"}}' scheduler cluster
 ```
 
@@ -171,18 +171,18 @@ This DRA Driver is built off of [NVIDIA's DRA Driver](https://github.com/NVIDIA/
 
 Clone the repo and cd into it
 
-```
+```bash
 git clone https://github.com/thommichel/k8s-dra-driver-gpu.git
 ```
 
 Install the DRA driver
 
-```
+```bash
 ./demo/clusters/openshift/install-dra-driver.sh
 ```
 
 And make sure the pods startup correctly
-```
+```bash
 oc get pods -n nvidia
 ```
 ```
@@ -194,7 +194,7 @@ nvidia-dra-driver-k8s-dra-driver-kubelet-plugin-pskgj         1/1     Running   
 #### Building a Custom Image
 
 If any custom changes need to be made to DRA Driver image, modify the necessary files and rebuild the image
-```
+```bash
 ./demo/clusters/openshift/build-dra-driver.sh
 ```
 This image will then need to be added to a registry so it can be referenced by [`./versions.mk`](./versions.mk#L18), [`./deployments/helm/k8s-dra-driver/Chart.yaml`](./deployments/helm/k8s-dra-driver/Chart.yaml#L18), and [`./deployments/helm/k8s-dra-driver/values.yaml`](./deployments/helm/k8s-dra-driver/values.yaml#L52)
@@ -216,13 +216,13 @@ The following demo will utilize a single A100 GPU with the `all-balanced` MIG se
 
 
 You can run the demo with:
-```console
+```bash
 oc apply  -f ./demo/quickstart/gpu-test-mig.yaml
 ```
 
 All 6 pods should then be created. Some of the pods may still be in the `ContainerCreating` state while the MPS control daemon starts up
 
-```
+```bash
 oc get pods -n gpu-test-mig
 ```
 ```
@@ -237,7 +237,7 @@ pod5   0/1     ContainerCreating   0          6s
 
 To check the status of the MPS control daemons run the following
 
-```
+```bash
 oc get pods -n nvidia | grep mps-control-daemon
 ```
 ```
@@ -247,7 +247,7 @@ mps-control-daemon-270565e7-dfda-4ac4-a5f3-3cc8187ff0e3-6bscg78   1/1     Runnin
 
 Once all pods are in the running state, confirm that the GPU is being shared correctly by running
 
-```
+```bash
 oc exec -ti <nvidia-driver-daemonset-xxxxx...> -n nvidia-gpu-operator -- nvidia-smi
 ```
 

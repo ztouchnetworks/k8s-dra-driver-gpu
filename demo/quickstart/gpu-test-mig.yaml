@@ -4,6 +4,8 @@
 #   2 pods with 1 container sharing mig with mps
 #   2 pods with 1 container sharing mig with time slicing
 
+# NOTE: This demo requires 1 GPU with MIG enabled
+
 ---
 apiVersion: v1
 kind: Namespace
