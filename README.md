@@ -22,20 +22,22 @@ Install the OpenShift CLI `oc`. See the official documentation [here](https://do
 
 ### Install the NVIDIA GPU Operator
 
-Install NVIDIA GPU Operator **_v25.3.1_** by following the official documentation [here](https://docs.nvidia.com/datacenter/cloud-native/openshift/24.9.2/steps-overview.html). **Make sure** to also install the Node Feature Discovery Operator as it is a required dependency of the GPU Operator.
+Install NVIDIA GPU Operator **_v25.3.1_** by following the official documentation [here](https://docs.nvidia.com/datacenter/cloud-native/openshift/24.9.2/steps-overview.html). **Make sure** to also install the Node Feature Discovery Operator as it is a required dependency of the GPU Operator (this example uses version **_4.18.0-202505200035_**).
 
-Once installed, begin creating the default cluster policy as described [here](https://docs.nvidia.com/datacenter/cloud-native/openshift/latest/install-gpu-ocp.html#create-the-clusterpolicy-instance). The only change that needs to be done to the default policy is to disable the devicePlugin
+Once installed, begin creating the default cluster policy as described [here](https://docs.nvidia.com/datacenter/cloud-native/openshift/25.3.1/install-gpu-ocp.html#create-the-clusterpolicy-instance). The only change that needs to be done to the default policy is to disable the devicePlugin
 
-```
+```yaml
+...
   devicePlugin:
     config:
       ...
     enabled: false
     mps:
       ...
+...
 ```
 
-Create the policy with that one change and wait for the state to be `ready` (this can take from 15-30 minutes)
+Create the policy with that one change and wait for the state to be `ready` (this can take up to 30 minutes)
 
 ![cluster policy ready example](./docs/cluster-policy-ready.png)
 
@@ -50,7 +52,7 @@ STRATEGY=mixed && \
   oc patch clusterpolicy/gpu-cluster-policy --type='json' -p='[{"op": "replace", "path": "/spec/mig/strategy", "value": '$STRATEGY'}]'
 ```
 
-Set the desired MIG profiles. The available default MIG profiles can be seen [here](https://gitlab.com/nvidia/kubernetes/gpu-operator/-/blob/v1.8.0/assets/state-mig-manager/0400_configmap.yaml). To create custom profiles, follow these [instructions](https://docs.nvidia.com/datacenter/cloud-native/openshift/latest/mig-ocp.html#creating-and-applying-a-custom-mig-configuration). This example will use the `all-balanced` MIG setup.
+Set the desired MIG profiles. The available default MIG profiles can be seen [here](https://gitlab.com/nvidia/kubernetes/gpu-operator/-/blob/v1.8.0/assets/state-mig-manager/0400_configmap.yaml). To create custom profiles, follow [these instructions](https://docs.nvidia.com/datacenter/cloud-native/openshift/25.3.1/mig-ocp.html#creating-and-applying-a-custom-mig-configuration). This example will use the `all-balanced` MIG setup.
 
 ```
 NODE_NAME=<node name> && MIG_CONFIGURATION=all-balanced && oc label node/$NODE_NAME nvidia.com/mig.config=$MIG_CONFIGURATION --overwrite
@@ -65,6 +67,7 @@ oc -n nvidia-gpu-operator logs ds/nvidia-mig-manager --all-containers -f --prefi
 If successful, the logs will look something like this
 
 ```
+...
 [pod/nvidia-mig-manager-nq2fs/nvidia-mig-manager] node/<node name> labeled
 [pod/nvidia-mig-manager-nq2fs/nvidia-mig-manager] Changing the 'nvidia.com/mig.config.state' node label to 'success'
 [pod/nvidia-mig-manager-nq2fs/nvidia-mig-manager] node/<node name> labeled
@@ -72,10 +75,10 @@ If successful, the logs will look something like this
 [pod/nvidia-mig-manager-nq2fs/nvidia-mig-manager] time="2025-06-18T18:38:35Z" level=info msg="Waiting for change to 'nvidia.com/mig.config' label"
 ```
 
-Finally, use the NVIDIA GPU Operator to confirm the creation of the profiles. First, identify the driver daemonset by running
+Finally, use the NVIDIA GPU Operator to confirm the MIG profiles were created succesfully. Start by identifying the driver daemonset
 
 ```
-oc get pods -n nvidia-gpu-operator
+oc get pods -n nvidia-gpu-operator | grep nvidia-driver-daemonset
 ```
 
 Then run `nvidia-smi` through the daemonset with
@@ -84,7 +87,7 @@ Then run `nvidia-smi` through the daemonset with
 oc exec -ti <nvidia-driver-daemonset-xxxxx...> -n nvidia-gpu-operator -- nvidia-smi
 ```
 
-If successful, you should see something like this
+If successful, you should see something like this that shows your MIG profiles
 ```
 Wed Jun 18 19:22:47 2025       
 +-----------------------------------------------------------------------------------------+
@@ -129,31 +132,47 @@ Wed Jun 18 19:22:47 2025
 ```
 
 ### Enabling DRA on OpenShift
-
-**NOTE** enabling DRA in OpenShift permanently prevents the cluster from being upgraded with minor updates and cannot be undone. Only proceed if this does not matter for your cluster.
+> [!CAUTION]
+> Enabling DRA in OpenShift permanently prevents the cluster from being upgraded with minor updates and [cannot be undone](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/nodes/working-with-clusters#:~:text=on%20production%20clusters.-,Warning,-Enabling%20the%20TechPreviewNoUpgrade). Only proceed if this does not matter for your cluster.
 
 DRA is an experimental feature and is not available by default in OpenShift. To use it, enable the `TechPreviewNoUpgrade` feature set as explained in [Enabling features using FeatureGates](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/nodes/working-with-clusters#nodes-cluster-enabling), either with the CLI or Web Console. The feature set includes the `DynamicResourceAllocation` feature gate.
 
-Additionally, set the scheduler to have `HighNodeUtilization` in the CLI
+Next, set the scheduler to have `HighNodeUtilization` in the CLI
 
 ```console
 $ oc patch --type merge -p '{"spec":{"profile": "HighNodeUtilization"}}' scheduler cluster
 ```
 
+Due to OpenShift's stricter security requirements, the following `securityContext` configuration needs to be added to each container in Pod/Deployment yamls. Examples of this can be seen in the `./demo/quickstart/` directory
+
+```yaml
+securityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+```
+
+Additionally, to ensure images do not override the MIG profiles specified by DRA, the following environment variable needs to be set in each container as well
+
+```yaml
+env:
+  - name: NVIDIA_VISIBLE_DEVICES
+    value: void
+```
+
 
 ### Install the DRA Driver
 
-This DRA Driver is built off of NVIDIA's DRA Driver for Kubernetes 1.31 and uses the the v1alpha3 DRA API
-
-
-ADD LINKS
-
-
+This DRA Driver is built off of [NVIDIA's DRA Driver](https://github.com/NVIDIA/k8s-dra-driver-gpu/tree/main) for Kubernetes 1.31 and uses the the [v1alpha3 DRA API](https://v1-31.docs.kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/#api)
 
 Clone the repo and cd into it
 
 ```
-GIT GLONE
+git clone https://github.com/thommichel/k8s-dra-driver-gpu.git
 ```
 
 Install the DRA driver
@@ -163,9 +182,10 @@ Install the DRA driver
 ```
 
 And make sure the pods startup correctly
-
 ```
-$ oc get pods -n nvidia
+oc get pods -n nvidia
+```
+```
 NAME                                                          READY   STATUS    RESTARTS   AGE
 nvidia-dra-driver-k8s-dra-driver-controller-6c8958947-ls6px   1/1     Running   0          10s
 nvidia-dra-driver-k8s-dra-driver-kubelet-plugin-pskgj         1/1     Running   0          10s
@@ -177,58 +197,115 @@ If any custom changes need to be made to DRA Driver image, modify the necessary 
 ```
 ./demo/clusters/openshift/build-dra-driver.sh
 ```
-
-This image will then need to be added to some sort of registry so it can be referenced by `./versions.mk`, `./deployments/helm/k8s-dra-driver/Chart.yaml`, and `./deployments/helm/k8s-dra-driver/values.yaml`
+This image will then need to be added to a registry so it can be referenced by [`./versions.mk`](./versions.mk#L18), [`./deployments/helm/k8s-dra-driver/Chart.yaml`](./deployments/helm/k8s-dra-driver/Chart.yaml#L18), and [`./deployments/helm/k8s-dra-driver/values.yaml`](./deployments/helm/k8s-dra-driver/values.yaml#L52)
 
 ## Demo
 
-<!-- Finally, you can run the various examples contained in the `demo/specs/quickstart` folder
+The following demo will utilize a single A100 GPU with the `all-balanced` MIG setup used in the installation instructions. The demo will create 6 pods to demonstrate DRA:
 
-You can run them as follows:
-```console
-kubectl apply --filename=demo/specs/quickstart/gpu-test{1,2,3}.yaml
-```
+| Pods      | MIG Profile | Sharing Strategy | Total Containers |
+|-----------|-------------|------------------|:----------:|
+| pod0      | 1g.10gb (0)    | MPS              |      2     |
+| pod1      | 1g.10gb (1)    | Time Slicing     |      2     |
+| pod2, pod3 | 2g.20gb     | Time Slicing     |      2     |
+| pod4, pod5 | 3g.40gb     | MPS              |      2     |
 
-Get the pods' statuses. Depending on which GPUs are available, running the first three examples will produce output similar to the following...
 
-**Note:** there is a [known issue with kind](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files). You may see an error while trying to tail the log of a running pod in the kind cluster: `failed to create fsnotify watcher: too many open files.` The issue may be resolved by increasing the value for `fs.inotify.max_user_watches`.
+![demo diagram](./docs/demo-diagram.png)
+
+
+
+You can run the demo with:
 ```console
-kubectl get pod -A -l app=pod
-```
-```
-NAMESPACE           NAME                                       READY   STATUS    RESTARTS   AGE
-gpu-test1           pod1                                       1/1     Running   0          34s
-gpu-test1           pod2                                       1/1     Running   0          34s
-gpu-test2           pod                                        2/2     Running   0          34s
-gpu-test3           pod1                                       1/1     Running   0          34s
-gpu-test3           pod2                                       1/1     Running   0          34s
-```
-```console
-kubectl logs -n gpu-test1 -l app=pod
-```
-```
-GPU 0: A100-SXM4-40GB (UUID: GPU-662077db-fa3f-0d8f-9502-21ab0ef058a2)
-GPU 0: A100-SXM4-40GB (UUID: GPU-4cf8db2d-06c0-7d70-1a51-e59b25b2c16c)
-```
-```console
-kubectl logs -n gpu-test2 pod --all-containers
-```
-```
-GPU 0: A100-SXM4-40GB (UUID: GPU-79a2ba02-a537-ccbf-2965-8e9d90c0bd54)
-GPU 0: A100-SXM4-40GB (UUID: GPU-79a2ba02-a537-ccbf-2965-8e9d90c0bd54)
+oc apply  -f ./demo/quickstart/gpu-test-mig.yaml
 ```
 
-```console
-kubectl logs -n gpu-test3 -l app=pod
+All 6 pods should then be created. Some of the pods may still be in the `ContainerCreating` state while the MPS control daemon starts up
+
+```
+oc get pods -n gpu-test-mig
 ```
 ```
-GPU 0: A100-SXM4-40GB (UUID: GPU-4404041a-04cf-1ccf-9e70-f139a9b1e23c)
-GPU 0: A100-SXM4-40GB (UUID: GPU-4404041a-04cf-1ccf-9e70-f139a9b1e23c)
+NAME   READY   STATUS              RESTARTS   AGE
+pod0   0/2     ContainerCreating   0          7s
+pod1   0/2     ContainerCreating   0          7s
+pod2   0/1     ContainerCreating   0          7s
+pod3   0/1     ContainerCreating   0          6s
+pod4   0/1     ContainerCreating   0          6s
+pod5   0/1     ContainerCreating   0          6s
 ```
 
-### Cleaning up the environment
+To check the status of the MPS control daemons run the following
 
-Remove the cluster created in the preceding steps:
-```console
-./demo/clusters/kind/delete-cluster.sh
-``` -->
+```
+oc get pods -n nvidia | grep mps-control-daemon
+```
+```
+mps-control-daemon-270565e7-dfda-4ac4-a5f3-3cc8187ff0e3-07z8fps   0/1     ContainerCreating   0          1s
+mps-control-daemon-270565e7-dfda-4ac4-a5f3-3cc8187ff0e3-6bscg78   1/1     Running             0          5s
+```
+
+Once all pods are in the running state, confirm that the GPU is being shared correctly by running
+
+```
+oc exec -ti <nvidia-driver-daemonset-xxxxx...> -n nvidia-gpu-operator -- nvidia-smi
+```
+
+If sucessful, there should be 10 processes running on the GPU: 
+- 1 for each container (8 total | 2 on each MIG profile)
+- 1 MPS server for MIG profile 1g.10gb
+- 1 MPS server for MIG profile 3g.40gb
+
+```
+Mon Jun 23 15:43:26 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.148.08             Driver Version: 570.148.08     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100 80GB PCIe          On  |   00000000:B6:00.0 Off |                   On |
+| N/A   57C    P0            223W /  300W |    5728MiB /  81920MiB |     N/A      Default |
+|                                         |                        |              Enabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| MIG devices:                                                                            |
++------------------+----------------------------------+-----------+-----------------------+
+| GPU  GI  CI  MIG |                     Memory-Usage |        Vol|        Shared         |
+|      ID  ID  Dev |                       BAR1-Usage | SM     Unc| CE ENC  DEC  OFA  JPG |
+|                  |                                  |        ECC|                       |
+|==================+==================================+===========+=======================|
+|  0    1   0   0  |            1442MiB / 40192MiB    | 42      0 |  3   0    2    0    0 |
+|                  |                 6MiB / 65535MiB  |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0    5   0   1  |            1513MiB / 19968MiB    | 28      0 |  2   0    1    0    0 |
+|                  |                 4MiB / 32767MiB  |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0   13   0   2  |            1376MiB /  9728MiB    | 14      0 |  1   0    0    0    0 |
+|                  |                 4MiB / 16383MiB  |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+|  0   14   0   3  |            1398MiB /  9728MiB    | 14      0 |  1   0    0    0    0 |
+|                  |                 6MiB / 16383MiB  |           |                       |
++------------------+----------------------------------+-----------+-----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0    1    0          3817640    M+C   /tmp/sample                             648MiB |
+|    0    1    0          3817645      C   nvidia-cuda-mps-server                   30MiB |
+|    0    1    0          3817656    M+C   /tmp/sample                             648MiB |
+|    0    5    0          3817655      C   /tmp/sample                             714MiB |
+|    0    5    0          3817659      C   /tmp/sample                             714MiB |
+|    0   13    0          3817658      C   /tmp/sample                             664MiB |
+|    0   13    0          3817700      C   /tmp/sample                             664MiB |
+|    0   14    0          3817404    M+C   /tmp/sample                             662MiB |
+|    0   14    0          3817406      C   nvidia-cuda-mps-server                   30MiB |
+|    0   14    0          3817454    M+C   /tmp/sample                             662MiB |
++-----------------------------------------------------------------------------------------+
+```
+
+Other demos can be run in the `./demo/quickstart/` directory. Some of the demos may utilize more than 1 GPU or may use a GPU without MIG enabled

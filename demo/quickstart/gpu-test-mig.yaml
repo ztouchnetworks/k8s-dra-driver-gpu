@@ -1,3 +1,9 @@
+# 6 pods:
+#   1 pod with 2 containers sharing mig with mps
+#   1 pod with 2 containers sharing mig with time slicing
+#   2 pods with 1 container sharing mig with mps
+#   2 pods with 1 container sharing mig with time slicing
+
 ---
 apiVersion: v1
 kind: Namespace
@@ -51,8 +57,8 @@ spec:
           sharing:
             strategy: MPS
             mpsConfig:
-              defaultActiveThreadPercentage: 40
-              defaultPinnedDeviceMemoryLimit: 20Gi
+              defaultActiveThreadPercentage: 100
+              defaultPinnedDeviceMemoryLimit: 40Gi
     - requests: ["mig-1g-1"]
       opaque:
         driver: gpu.nvidia.com
@@ -60,10 +66,7 @@ spec:
           apiVersion: gpu.nvidia.com/v1alpha1
           kind: MigDeviceConfig
           sharing:
-            strategy: MPS
-            mpsConfig:
-              defaultActiveThreadPercentage: 60
-              defaultPinnedDeviceMemoryLimit: 30Gi
+            strategy: TimeSlicing
     - requests: ["mig-2g"]
       opaque:
         driver: gpu.nvidia.com
@@ -71,10 +74,7 @@ spec:
           apiVersion: gpu.nvidia.com/v1alpha1
           kind: MigDeviceConfig
           sharing:
-            strategy: MPS
-            mpsConfig:
-              defaultActiveThreadPercentage: 30
-              defaultPinnedDeviceMemoryLimit: 40Gi
+            strategy: TimeSlicing
     - requests: ["mig-3g"]
       opaque:
         driver: gpu.nvidia.com
@@ -84,8 +84,8 @@ spec:
           sharing:
             strategy: MPS
             mpsConfig:
-              defaultActiveThreadPercentage: 100
-              defaultPinnedDeviceMemoryLimit: 50Gi
+              defaultActiveThreadPercentage: 25
+              defaultPinnedDeviceMemoryLimit: 20Gi
 
 ---
 apiVersion: v1
@@ -98,7 +98,7 @@ spec:
     - name: mig-devices
       resourceClaimName: mig-devices
   containers:
-    - name: ctr0
+    - name: crt0
       image: nvcr.io/nvidia/k8s/cuda-sample:nbody-cuda11.6.0-ubuntu18.04
       command: ["bash", "-c"]
       args: ["trap 'exit 0' TERM; /tmp/sample --benchmark --numbodies=4226000 & wait"]
@@ -108,7 +108,7 @@ spec:
       resources:
         claims:
           - name: mig-devices
-            request: mig-1g-1
+            request: mig-1g-0
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -128,25 +128,6 @@ spec:
         claims:
           - name: mig-devices
             request: mig-1g-0
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-            - ALL
-    - name: ctr2
-      image: nvcr.io/nvidia/k8s/cuda-sample:nbody-cuda11.6.0-ubuntu18.04
-      command: ["bash", "-c"]
-      args: ["trap 'exit 0' TERM; /tmp/sample --benchmark --numbodies=4226000 & wait"]
-      env:
-      - name: NVIDIA_VISIBLE_DEVICES
-        value: void
-      resources:
-        claims:
-          - name: mig-devices
-            request: mig-3g
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -171,7 +152,7 @@ spec:
     - name: mig-devices
       resourceClaimName: mig-devices
   containers:
-    - name: ctr0
+    - name: crt0
       image: nvcr.io/nvidia/k8s/cuda-sample:nbody-cuda11.6.0-ubuntu18.04
       command: ["bash", "-c"]
       args: ["trap 'exit 0' TERM; /tmp/sample --benchmark --numbodies=4226000 & wait"]
@@ -200,7 +181,7 @@ spec:
       resources:
         claims:
           - name: mig-devices
-            request: mig-1g-0
+            request: mig-1g-1
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -209,7 +190,93 @@ spec:
         capabilities:
           drop:
             - ALL
-    - name: ctr2
+tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: gpu-test-mig
+  name: pod2
+spec:
+  resourceClaims:
+    - name: mig-devices
+      resourceClaimName: mig-devices
+  containers:
+    - name: crt0
+      image: nvcr.io/nvidia/k8s/cuda-sample:nbody-cuda11.6.0-ubuntu18.04
+      command: ["bash", "-c"]
+      args: ["trap 'exit 0' TERM; /tmp/sample --benchmark --numbodies=4226000 & wait"]
+      env:
+      - name: NVIDIA_VISIBLE_DEVICES
+        value: void
+      resources:
+        claims:
+          - name: mig-devices
+            request: mig-2g
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: gpu-test-mig
+  name: pod3
+spec:
+  resourceClaims:
+    - name: mig-devices
+      resourceClaimName: mig-devices
+  containers:
+    - name: crt0
+      image: nvcr.io/nvidia/k8s/cuda-sample:nbody-cuda11.6.0-ubuntu18.04
+      command: ["bash", "-c"]
+      args: ["trap 'exit 0' TERM; /tmp/sample --benchmark --numbodies=4226000 & wait"]
+      env:
+      - name: NVIDIA_VISIBLE_DEVICES
+        value: void
+      resources:
+        claims:
+          - name: mig-devices
+            request: mig-2g
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: gpu-test-mig
+  name: pod4
+spec:
+  resourceClaims:
+    - name: mig-devices
+      resourceClaimName: mig-devices
+  containers:
+    - name: crt0
       image: nvcr.io/nvidia/k8s/cuda-sample:nbody-cuda11.6.0-ubuntu18.04
       command: ["bash", "-c"]
       args: ["trap 'exit 0' TERM; /tmp/sample --benchmark --numbodies=4226000 & wait"]
@@ -238,51 +305,13 @@ apiVersion: v1
 kind: Pod
 metadata:
   namespace: gpu-test-mig
-  name: pod2
+  name: pod5
 spec:
   resourceClaims:
     - name: mig-devices
       resourceClaimName: mig-devices
   containers:
-    - name: ctr0
-      image: nvcr.io/nvidia/k8s/cuda-sample:nbody-cuda11.6.0-ubuntu18.04
-      command: ["bash", "-c"]
-      args: ["trap 'exit 0' TERM; /tmp/sample --benchmark --numbodies=4226000 & wait"]
-      env:
-      - name: NVIDIA_VISIBLE_DEVICES
-        value: void
-      resources:
-        claims:
-          - name: mig-devices
-            request: mig-1g-1
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-            - ALL
-    - name: ctr1
-      image: nvcr.io/nvidia/k8s/cuda-sample:nbody-cuda11.6.0-ubuntu18.04
-      command: ["bash", "-c"]
-      args: ["trap 'exit 0' TERM; /tmp/sample --benchmark --numbodies=4226000 & wait"]
-      env:
-      - name: NVIDIA_VISIBLE_DEVICES
-        value: void
-      resources:
-        claims:
-          - name: mig-devices
-            request: mig-1g-0
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop:
-            - ALL
-    - name: ctr2
+    - name: crt0
       image: nvcr.io/nvidia/k8s/cuda-sample:nbody-cuda11.6.0-ubuntu18.04
       command: ["bash", "-c"]
       args: ["trap 'exit 0' TERM; /tmp/sample --benchmark --numbodies=4226000 & wait"]
