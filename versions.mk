@@ -15,7 +15,7 @@
 DRIVER_NAME := k8s-dra-driver
 MODULE := github.com/NVIDIA/$(DRIVER_NAME)
 
-REGISTRY ?= docker.io/thommichel
+REGISTRY ?= docker.io/ztouchnet
 
 VERSION  ?= v0.1.0
 

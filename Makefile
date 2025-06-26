@@ -38,7 +38,8 @@ TARGETS := $(MAKE_TARGETS) $(CMD_TARGETS)
 DOCKER_TARGETS := $(patsubst %,docker-%, $(TARGETS))
 .PHONY: $(TARGETS) $(DOCKER_TARGETS)
 DOCKERFILE_DEVEL ?= "images/devel/Dockerfile"
-DOCKERFILE_CONTEXT ?= "https://github.com/thommichel/k8s-test-infra.git"
+DOCKERFILE_CONTEXT ?= "https://github.com/NVIDIA/k8s-test-infra.git"
+DOCKERFILE_CONTEXT_REF ?= "\#f9de312586d881c3389d972614d322a165a8aaf9"
 
 GOOS ?= linux
 GOARCH ?= $(shell uname -m | sed -e 's,aarch64,arm64,' -e 's,x86_64,amd64,')
@@ -126,7 +127,7 @@ build-image:
 		--build-arg MOQ_VERSION="$(MOQ_VERSION)" \
 		--tag $(BUILDIMAGE) \
 		-f $(DOCKERFILE_DEVEL) \
-		$(DOCKERFILE_CONTEXT)
+		$(DOCKERFILE_CONTEXT)$(DOCKERFILE_CONTEXT_REF)
 
 $(DOCKER_TARGETS): docker-%:
 	@echo "Running 'make $(*)' in container image $(BUILDIMAGE)"

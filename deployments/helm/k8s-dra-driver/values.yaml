@@ -47,9 +47,10 @@ deviceClasses: ["gpu", "mig", "imex"]
 # nvkind decided to allow in.
 maskNvidiaDriverParams: false
 
-imagePullSecrets: []
+imagePullSecrets:
+- name: registry-access-secret
 image:
-  repository: docker.io/thommichel/k8s-dra-driver
+  repository: docker.io/ztouchnet/k8s-dra-driver
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""

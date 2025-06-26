@@ -172,7 +172,13 @@ This DRA Driver is built off of [NVIDIA's DRA Driver](https://github.com/NVIDIA/
 Clone the repo and cd into it
 
 ```bash
-git clone https://github.com/thommichel/k8s-dra-driver-gpu.git
+git clone https://github.com/ztouchnetworks/k8s-dra-driver-gpu.git
+```
+
+Pulling the DRA Image requires permission from Z-Touch. Create the pull secret by running
+```
+oc create namespace nvidia
+oc create secret generic registry-access-secret --from-file=.dockerconfigjson=$HOME/.docker/config.json --type=kubernetes.io/dockerconfigjson -n nvidia
 ```
 
 Install the DRA driver
