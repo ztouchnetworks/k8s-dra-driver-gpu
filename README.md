@@ -52,7 +52,23 @@ STRATEGY=mixed && \
   oc patch clusterpolicy/gpu-cluster-policy --type='json' -p='[{"op": "replace", "path": "/spec/mig/strategy", "value": '$STRATEGY'}]'
 ```
 
-Set the desired MIG profiles. The available default MIG profiles can be seen [here](https://gitlab.com/nvidia/kubernetes/gpu-operator/-/blob/v1.8.0/assets/state-mig-manager/0400_configmap.yaml). To create custom profiles, follow [these instructions](https://docs.nvidia.com/datacenter/cloud-native/openshift/25.3.1/mig-ocp.html#creating-and-applying-a-custom-mig-configuration). This example will use the `all-balanced` MIG setup.
+Set the desired MIG profiles. The available default MIG profiles can be seen [here](https://gitlab.com/nvidia/kubernetes/gpu-operator/-/blob/v1.8.0/assets/state-mig-manager/0400_configmap.yaml). To create custom profiles, follow [these instructions](https://docs.nvidia.com/datacenter/cloud-native/openshift/25.3.1/mig-ocp.html#creating-and-applying-a-custom-mig-configuration). This demo will use the default MIG configs, but in a custom file that is more explicit about GPU PCI Device IDs. To use the custom file, create it in the cluster.
+
+```
+oc apply -f ./demo/quickstart/custom-mig-parted-config.yaml
+```
+
+Once created, reference it in the GPU Operator ClusterPolicy.
+
+```
+migManager:
+  config:
+    default: ...
+    name: custom-mig-parted-config
+  enabled: true
+```
+
+After the custom MIG configs have been added, set the current MIG config to `all-balanced` with the following command.
 
 ```bash
 NODE_NAME=<node name> && MIG_CONFIGURATION=all-balanced && oc label node/$NODE_NAME nvidia.com/mig.config=$MIG_CONFIGURATION --overwrite
