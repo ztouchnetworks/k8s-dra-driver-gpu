@@ -52,7 +52,7 @@ STRATEGY=mixed && \
   oc patch clusterpolicy/gpu-cluster-policy --type='json' -p='[{"op": "replace", "path": "/spec/mig/strategy", "value": '$STRATEGY'}]'
 ```
 
-Set the desired MIG profiles. The available default MIG profiles can be seen [here](https://gitlab.com/nvidia/kubernetes/gpu-operator/-/blob/v1.8.0/assets/state-mig-manager/0400_configmap.yaml). To create custom profiles, follow [these instructions](https://docs.nvidia.com/datacenter/cloud-native/openshift/25.3.1/mig-ocp.html#creating-and-applying-a-custom-mig-configuration). This demo will use the default MIG configs, but in a custom file that is more explicit about [GPU PCI Device IDs](https://download.nvidia.com/XFree86/Linux-x86_64/410.66/README/supportedchips.html). To use the custom file, create it in the cluster.
+Set the desired MIG profiles. The available default MIG profiles can be seen [here](https://gitlab.com/nvidia/kubernetes/gpu-operator/-/blob/v1.8.0/assets/state-mig-manager/0400_configmap.yaml). To create custom profiles, follow [these instructions](https://docs.nvidia.com/datacenter/cloud-native/openshift/25.3.1/mig-ocp.html#creating-and-applying-a-custom-mig-configuration). This demo will use the default MIG configs, but in a custom file that is more explicit about [GPU PCI Device IDs](https://download.nvidia.com/XFree86/Linux-x86_64/525.85.05/README/supportedchips.html). To use the custom file, create it in the cluster.
 
 ```
 oc apply -f ./demo/quickstart/custom-mig-parted-config.yaml
